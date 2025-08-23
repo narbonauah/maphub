@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Mapa de Eventos</title>
+  <title>MapHub</title>
   <meta charset="utf-8" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -23,45 +23,37 @@
     <select id="tipo">
       <option value="">Todos</option>
     </select>
-    <!-- Botón opcional: lo dejamos por si quieres usarlo manualmente -->
     <button onclick="filtrar()">Filtrar</button>
   </div>
   <div id="map"></div>
 
   <script>
-    // --------- Helpers robustos ---------
     const toNum = (v) => {
       if (v === null || v === undefined) return NaN;
       return parseFloat(String(v).replace(',', '.'));
     };
 
-    // Acepta "YYYY-MM-DD" o "DD/MM/YYYY"
     const parseFecha = (s) => {
       if (!s) return null;
       s = String(s).trim();
-      // ISO
       if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
         const d = new Date(s + "T00:00:00");
         return isNaN(d) ? null : d;
       }
-      // dd/mm/yyyy (asumimos ES)
       const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
       if (m) {
         const dd = parseInt(m[1], 10);
         const mm = parseInt(m[2], 10) - 1;
         let yyyy = parseInt(m[3], 10);
-        if (yyyy < 100) yyyy += 2000; // 25 -> 2025
+        if (yyyy < 100) yyyy += 2000;
         const d = new Date(yyyy, mm, dd);
         return isNaN(d) ? null : d;
       }
-      // Último intento: Date nativo
       const d = new Date(s);
       return isNaN(d) ? null : d;
     };
 
-    // Normaliza claves de una fila (admite sinonimias comunes)
     const normalizeRow = (row) => {
-      // Mapa por heurística (claves en minúsculas)
       const lower = {};
       Object.keys(row).forEach(k => lower[k.toLowerCase().trim()] = row[k]);
 
@@ -69,7 +61,6 @@
         for (const c of candidatos) {
           if (c in lower && String(lower[c]).trim() !== "") return lower[c];
         }
-        // búsqueda heurística por contiene
         for (const key of Object.keys(lower)) {
           if (candidatos.some(c => key.includes(c))) {
             if (String(lower[key]).trim() !== "") return lower[key];
@@ -85,20 +76,13 @@
       const recinto = pick('recinto', 'venue', 'lugar', 'site', 'ubicacion', 'ubicación');
       const desc = pick('descripcion', 'descripción', 'description', 'desc');
       const link = pick('link', 'enlace', 'url');
-
-      // lat / lon con variantes
-      const latRaw = pick('lat', 'latitud', 'latitude');
-      const lonRaw = pick('lon', 'lng', 'long', 'longitud', 'longitude');
-
-      const lat = toNum(latRaw);
-      const lon = toNum(lonRaw);
-
+      const lat = toNum(pick('lat', 'latitud', 'latitude'));
+      const lon = toNum(pick('lon', 'lng', 'long', 'longitud', 'longitude'));
       const fecha = parseFecha(fechaStr);
 
       return { nombre, tipo, fecha, hora, recinto, descripcion: desc, link, lat, lon };
     };
 
-    // --------- Mapa ---------
     var map = L.map('map').setView([40.4167, -3.70325], 6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
@@ -106,11 +90,8 @@
 
     var eventos = [];
     var markers = [];
-
-    // Tu Google Sheet (CSV publicado)
     var sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQBgXQLiwgo23JJkp2QIOxK5OnMu-VCDTAghFzf0-C5S7gZGKe1Oi5sclWg2gWi1UM1N4Luxsd0zrY4/pub?output=csv";
 
-    // Fechas por defecto (hoy y +1 mes)
     const setDefaultDates = () => {
       let hoy = new Date();
       let unMes = new Date(hoy);
@@ -126,22 +107,15 @@
     };
     setDefaultDates();
 
-    // Cargar Sheet
     Papa.parse(sheetUrl, {
       download: true,
       header: true,
       skipEmptyLines: 'greedy',
       complete: function(results) {
-        // Normalizamos y filtramos filas válidas
         eventos = results.data
           .map(normalizeRow)
           .filter(e => Number.isFinite(e.lat) && Number.isFinite(e.lon) && e.nombre);
 
-        if (!eventos.length) {
-          console.warn("No se han encontrado eventos válidos. Revisa nombres de columnas y datos.");
-        }
-
-        // Poblar selector tipo (valores únicos limpios)
         const tipos = [...new Set(eventos.map(e => e.tipo).filter(t => t && t.trim() !== ""))].sort();
         const selectTipo = document.getElementById("tipo");
         tipos.forEach(t => {
@@ -151,30 +125,21 @@
           selectTipo.appendChild(opt);
         });
 
-        // Listeners: disparan filtro automáticamente
         document.getElementById("tipo").addEventListener("change", filtrar);
         document.getElementById("fechaInicio").addEventListener("change", filtrar);
         document.getElementById("fechaFin").addEventListener("change", filtrar);
 
-        // Pintado inicial
         filtrar();
-      },
-      error: function(err) {
-        console.error("Error cargando CSV de Google Sheets:", err);
-        alert("No se pudo cargar el CSV de Google Sheets. Verifica que esté 'Publicado en la web' como CSV.");
       }
     });
 
     function mostrarEventos(fechaInicio = null, fechaFin = null, tipo = null) {
-      // Limpiar marcadores
       markers.forEach(m => map.removeLayer(m));
       markers = [];
 
       const bounds = [];
       eventos.forEach(e => {
-        // Filtros
         if (tipo && String(e.tipo) !== String(tipo)) return;
-
         if (fechaInicio) {
           const fi = parseFecha(fechaInicio);
           if (fi && e.fecha && e.fecha < fi) return;
@@ -184,11 +149,13 @@
           if (ff && e.fecha && e.fecha > ff) return;
         }
 
+        let fechaTexto = e.fecha ? e.fecha.toISOString().slice(0,10) : "";
         const popup =
           `<b>${e.nombre}</b><br>` +
-          `${e.tipo ? e.tipo + " - " : ""}${e.fecha ? e.fecha.toISOString().slice(0,10) : ""} ${e.hora || ""}<br>` +
           `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>` +
-          `${e.descripcion ? e.descripcion : ""}` +
+          `<b>Fecha:</b> ${fechaTexto}<br>` +
+          `<b>Hora:</b> ${e.hora || "Sin especificar"}<br>` +
+          `${e.descripcion ? `<br>${e.descripcion}` : ""}` +
           `${e.link ? `<br><a href="${e.link}" target="_blank" rel="noopener">🔗 Más info</a>` : ""}`;
 
         const marker = L.marker([e.lat, e.lon]).addTo(map).bindPopup(popup);
