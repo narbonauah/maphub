@@ -27,6 +27,7 @@
     <select id="tipo">
       <option value="">Todos</option>
     </select>
+    <!-- Botón ya no es necesario, pero lo dejamos por si acaso -->
     <button onclick="filtrar()">Filtrar</button>
   </div>
   <div id="map"></div>
@@ -74,7 +75,12 @@
           selectTipo.appendChild(opt);
         });
 
-        // Mostramos por defecto con el rango inicial
+        // Eventos automáticos al cambiar filtros
+        document.getElementById("tipo").addEventListener("change", filtrar);
+        document.getElementById("fechaInicio").addEventListener("change", filtrar);
+        document.getElementById("fechaFin").addEventListener("change", filtrar);
+
+        // Mostrar por defecto
         filtrar();
       }
     });
@@ -102,4 +108,25 @@
             `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>` +
             `${e.descripcion || ""}`;
 
-          if
+          if (e.link) {
+            popupContent += `<br><a href="${e.link}" target="_blank">🔗 Más info</a>`;
+          }
+
+          let marker = L.marker([e.lat, e.lon]).addTo(map)
+            .bindPopup(popupContent);
+
+          markers.push(marker);
+        }
+      });
+    }
+
+    // Filtro por rango de fechas y tipo
+    function filtrar() {
+      var inicio = document.getElementById("fechaInicio").value;
+      var fin = document.getElementById("fechaFin").value;
+      var tipo = document.getElementById("tipo").value;
+      mostrarEventos(inicio, fin, tipo);
+    }
+  </script>
+</body>
+</html>
