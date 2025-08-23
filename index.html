@@ -7,10 +7,14 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <!-- AwesomeMarkers + FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.awesome-markers/2.0.4/leaflet.awesome-markers.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.awesome-markers/2.0.4/leaflet.awesome-markers.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
   <style>
     body { margin: 0; font-family: sans-serif; display: flex; height: 100vh; }
-
-    /* Sidebar */
     #filtros {
       width: 250px;
       padding: 10px;
@@ -21,24 +25,12 @@
       gap: 10px;
       transition: transform 0.3s ease;
     }
-    #filtros.hidden {
-      transform: translateX(-100%);
-    }
-
-    #filtros input, #filtros select, #filtros button {
-      padding: 5px;
-      font-size: 14px;
-      width: 100%;
-    }
-
+    #filtros.hidden { transform: translateX(-100%); }
     #map { flex: 1; }
-
-    /* Botón menú en móvil */
     #menuBtn {
       display: none;
       position: absolute;
-      top: 10px;
-      left: 10px;
+      top: 10px; left: 10px;
       z-index: 1000;
       background: white;
       border: 1px solid #ccc;
@@ -47,7 +39,6 @@
       font-size: 18px;
       cursor: pointer;
     }
-
     @media (max-width: 768px) {
       body { flex-direction: column; }
       #filtros {
@@ -61,8 +52,6 @@
       #menuBtn { display: block; }
       #map { flex: 1; }
     }
-
-    /* Leyenda */
     .legend {
       background: white;
       padding: 8px;
@@ -70,11 +59,10 @@
       border-radius: 5px;
       font-size: 13px;
     }
-    .legend img {
-      vertical-align: middle;
+    .legend i {
+      width: 18px; height: 18px;
+      text-align: center;
       margin-right: 5px;
-      width: 18px;
-      height: 18px;
     }
   </style>
 </head>
@@ -99,41 +87,29 @@
       if (v === null || v === undefined) return NaN;
       return parseFloat(String(v).replace(',', '.'));
     };
-
     const parseFecha = (s) => {
       if (!s) return null;
       const d = new Date(s);
       return isNaN(d) ? null : d;
     };
-
     const normalizeRow = (row) => {
       const lower = {};
       Object.keys(row).forEach(k => lower[k.toLowerCase().trim()] = row[k]);
-
       const pick = (...candidatos) => {
-        for (const c of candidatos) {
-          if (c in lower && String(lower[c]).trim() !== "") return lower[c];
-        }
-        for (const key of Object.keys(lower)) {
-          if (candidatos.some(c => key.includes(c))) {
-            if (String(lower[key]).trim() !== "") return lower[key];
-          }
-        }
+        for (const c of candidatos) if (c in lower && String(lower[c]).trim() !== "") return lower[c];
         return "";
       };
-
-      const nombre = pick('nombre', 'evento', 'titulo', 'name');
-      const tipo = String(pick('tipo', 'categoria', 'type')).trim();
-      const fechaStr = pick('fecha', 'date');
-      const hora = pick('hora', 'time');
-      const recinto = pick('recinto', 'lugar', 'venue');
-      const desc = pick('descripcion', 'descripción', 'description');
-      const link = pick('link', 'url');
-      const lat = toNum(pick('lat', 'latitud'));
-      const lon = toNum(pick('lon', 'lng', 'longitud'));
-      const fecha = parseFecha(fechaStr);
-
-      return { nombre, tipo, fecha, hora, recinto, descripcion: desc, link, lat, lon };
+      return {
+        nombre: pick('nombre','evento','titulo'),
+        tipo: pick('tipo','categoria'),
+        fecha: parseFecha(pick('fecha','date')),
+        hora: pick('hora','time'),
+        recinto: pick('recinto','lugar','venue'),
+        descripcion: pick('descripcion','description'),
+        link: pick('link','url'),
+        lat: toNum(pick('lat','latitud')),
+        lon: toNum(pick('lon','longitud','lng'))
+      };
     };
 
     // --- Mapa ---
@@ -142,37 +118,16 @@
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    // --- Iconos personalizados ---
+    // --- Iconos AwesomeMarkers ---
     const iconos = {
-      FUTBOL: L.icon({
-        iconUrl: "https://cdn-icons-png.flaticon.com/512/3011/3011346.png", // ⚽
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32]
-      }),
-      CONCIERTO: L.icon({
-        iconUrl: "https://cdn-icons-png.flaticon.com/512/727/727240.png", // 🎵
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32]
-      }),
-      OTROS: L.icon({
-        iconUrl: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32]
-      }),
-      DEFAULT: L.icon({
-        iconUrl: "https://maps.google.com/mapfiles/ms/icons/yellow-dot.png",
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32]
-      })
+      FUTBOL: L.AwesomeMarkers.icon({ icon: 'futbol', prefix: 'fa', markerColor: 'green' }),
+      CONCIERTO: L.AwesomeMarkers.icon({ icon: 'music', prefix: 'fa', markerColor: 'blue' }),
+      OTROS: L.AwesomeMarkers.icon({ icon: 'star', prefix: 'fa', markerColor: 'red' }),
+      DEFAULT: L.AwesomeMarkers.icon({ icon: 'info', prefix: 'fa', markerColor: 'orange' })
     };
 
-    var eventos = [];
-    var markers = [];
-    var sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQBgXQLiwgo23JJkp2QIOxK5OnMu-VCDTAghFzf0-C5S7gZGKe1Oi5sclWg2gWi1UM1N4Luxsd0zrY4/pub?output=csv";
+    var eventos = [], markers = [];
+    var sheetUrl = "TU_LINK_DE_GOOGLE_SHEETS_AQUI";
 
     const setDefaultDates = () => {
       let hoy = new Date();
@@ -211,7 +166,7 @@
       }
     });
 
-    function mostrarEventos(fechaInicio = null, fechaFin = null, tipo = null) {
+    function mostrarEventos(fechaInicio, fechaFin, tipo) {
       markers.forEach(m => map.removeLayer(m));
       markers = [];
 
@@ -234,7 +189,6 @@
           `${e.link ? `<br><a href="${e.link}" target="_blank">🔗 Más info</a>` : ""}`;
 
         const icon = iconos[e.tipo] || iconos.DEFAULT;
-
         const marker = L.marker([e.lat, e.lon], { icon }).addTo(map).bindPopup(popup);
         markers.push(marker);
         bounds.push([e.lat, e.lon]);
@@ -244,17 +198,16 @@
     }
 
     function filtrar() {
-      const inicio = document.getElementById("fechaInicio").value;
-      const fin = document.getElementById("fechaFin").value;
-      const tipo = document.getElementById("tipo").value;
-      mostrarEventos(inicio, fin, tipo);
+      mostrarEventos(
+        document.getElementById("fechaInicio").value,
+        document.getElementById("fechaFin").value,
+        document.getElementById("tipo").value
+      );
     }
 
-    // --- Sidebar toggle en móvil ---
-    const menuBtn = document.getElementById("menuBtn");
-    const filtros = document.getElementById("filtros");
-    menuBtn.addEventListener("click", () => {
-      filtros.classList.toggle("hidden");
+    // --- Toggle menú móvil ---
+    document.getElementById("menuBtn").addEventListener("click", () => {
+      document.getElementById("filtros").classList.toggle("hidden");
     });
 
     // --- Leyenda ---
@@ -263,10 +216,10 @@
       const div = L.DomUtil.create("div", "legend");
       div.innerHTML = `
         <b>Leyenda</b><br>
-        <img src="https://cdn-icons-png.flaticon.com/512/3011/3011346.png"> Fútbol<br>
-        <img src="https://cdn-icons-png.flaticon.com/512/727/727240.png"> Concierto<br>
-        <img src="https://maps.google.com/mapfiles/ms/icons/red-dot.png"> Otros<br>
-        <img src="https://maps.google.com/mapfiles/ms/icons/yellow-dot.png"> Resto
+        <i class="fa fa-futbol" style="color:green"></i> Fútbol<br>
+        <i class="fa fa-music" style="color:blue"></i> Concierto<br>
+        <i class="fa fa-star" style="color:red"></i> Otros<br>
+        <i class="fa fa-info" style="color:orange"></i> Resto
       `;
       return div;
     };
