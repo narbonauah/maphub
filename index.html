@@ -3,79 +3,56 @@
 <head>
   <title>MapHub</title>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- importante para móviles -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
-
-  <!-- AwesomeMarkers + FontAwesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.awesome-markers/2.0.4/leaflet.awesome-markers.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.awesome-markers/2.0.4/leaflet.awesome-markers.js"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
-
   <style>
-    body { margin: 0; font-family: sans-serif; display: flex; height: 100vh; }
+    body { margin: 0; font-family: sans-serif; }
+    #map { height: 80vh; }
+
+    /* Bloque de filtros */
     #filtros {
-      width: 250px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
       padding: 10px;
       background: #f9f9f9;
-      border-right: 1px solid #ccc;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      transition: transform 0.3s ease;
-      z-index: 2000;
-      position: relative;
+      border-bottom: 1px solid #ccc;
     }
-    #filtros.hidden { transform: translateX(-100%); }
-    #map { flex: 1; position: relative; z-index: 1; }
-    #menuBtn {
-      display: none;
-      position: absolute;
-      top: 10px; left: 10px;
-      z-index: 2100;
-      background: white;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      padding: 6px 10px;
-      font-size: 18px;
-      cursor: pointer;
+
+    #filtros label {
+      font-size: 14px;
     }
-    @media (max-width: 768px) {
-      body { flex-direction: column; }
+
+    #filtros input, #filtros select, #filtros button {
+      padding: 5px;
+      font-size: 14px;
+    }
+
+    /* Responsive para pantallas pequeñas */
+    @media (max-width: 600px) {
       #filtros {
-        position: absolute;
-        top: 0; left: 0; bottom: 0;
-        width: 250px;
-        z-index: 2000;
-        box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+        flex-direction: column;
+        align-items: flex-start;
       }
-      #menuBtn { display: block; }
-      #map { flex: 1; }
-    }
-    .legend {
-      background: white;
-      padding: 8px;
-      line-height: 20px;
-      border-radius: 5px;
-      font-size: 13px;
-      z-index: 2000;
-    }
-    .legend i {
-      width: 18px; height: 18px;
-      text-align: center;
-      margin-right: 5px;
+      #filtros label {
+        margin: 5px 0 0 0;
+      }
+      #map {
+        height: 75vh; /* un poco más bajo para dejar espacio a los filtros */
+      }
     }
   </style>
 </head>
 <body>
-  <button id="menuBtn">☰</button>
   <div id="filtros">
-    <label for="fechaInicio">Desde:</label>
+    <label for="fechaInicio">Desde: </label>
     <input type="date" id="fechaInicio" />
-    <label for="fechaFin">Hasta:</label>
+    <label for="fechaFin">Hasta: </label>
     <input type="date" id="fechaFin" />
-    <label for="tipo">Tipo:</label>
+    <label for="tipo">Tipo: </label>
     <select id="tipo">
       <option value="">Todos</option>
     </select>
@@ -84,66 +61,103 @@
   <div id="map"></div>
 
   <script>
-  document.addEventListener("DOMContentLoaded", function(){
-
-    const toNum = (v) => { if (v === null || v === undefined) return NaN; return parseFloat(String(v).replace(',', '.')); };
-    const parseFecha = (s) => { if (!s) return null; const d = new Date(s); return isNaN(d) ? null : d; };
-    const normalizeRow = (row) => {
-      const lower = {}; Object.keys(row).forEach(k => lower[k.toLowerCase().trim()] = row[k]);
-      const pick = (...c) => { for (const k of c) if (k in lower && String(lower[k]).trim() !== "") return lower[k]; return ""; };
-      return {
-        nombre: pick('nombre','evento','titulo'),
-        tipo: pick('tipo','categoria'),
-        fecha: parseFecha(pick('fecha','date')),
-        hora: pick('hora','time'),
-        recinto: pick('recinto','lugar','venue'),
-        descripcion: pick('descripcion','description'),
-        link: pick('link','url'),
-        lat: toNum(pick('lat','latitud')),
-        lon: toNum(pick('lon','longitud','lng'))
-      };
+    // --- utilidades de parseo ---
+    const toNum = (v) => {
+      if (v === null || v === undefined) return NaN;
+      return parseFloat(String(v).replace(',', '.'));
     };
 
-    var map = L.map('map', { zoomControl: false }).setView([40.4167, -3.70325], 6);
-    L.control.zoom({ position: 'topright' }).addTo(map);
+    const parseFecha = (s) => {
+      if (!s) return null;
+      s = String(s).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        const d = new Date(s + "T00:00:00");
+        return isNaN(d) ? null : d;
+      }
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (m) {
+        const dd = parseInt(m[1], 10);
+        const mm = parseInt(m[2], 10) - 1;
+        let yyyy = parseInt(m[3], 10);
+        if (yyyy < 100) yyyy += 2000;
+        const d = new Date(yyyy, mm, dd);
+        return isNaN(d) ? null : d;
+      }
+      const d = new Date(s);
+      return isNaN(d) ? null : d;
+    };
 
+    const normalizeRow = (row) => {
+      const lower = {};
+      Object.keys(row).forEach(k => lower[k.toLowerCase().trim()] = row[k]);
+
+      const pick = (...candidatos) => {
+        for (const c of candidatos) {
+          if (c in lower && String(lower[c]).trim() !== "") return lower[c];
+        }
+        for (const key of Object.keys(lower)) {
+          if (candidatos.some(c => key.includes(c))) {
+            if (String(lower[key]).trim() !== "") return lower[key];
+          }
+        }
+        return "";
+      };
+
+      const nombre = pick('nombre', 'título', 'titulo', 'evento', 'name');
+      const tipo = String(pick('tipo', 'categoria', 'type')).trim();
+      const fechaStr = pick('fecha', 'date', 'fecha_evento');
+      const hora = pick('hora', 'time');
+      const recinto = pick('recinto', 'venue', 'lugar', 'site', 'ubicacion', 'ubicación');
+      const desc = pick('descripcion', 'descripción', 'description', 'desc');
+      const link = pick('link', 'enlace', 'url');
+      const lat = toNum(pick('lat', 'latitud', 'latitude'));
+      const lon = toNum(pick('lon', 'lng', 'long', 'longitud', 'longitude'));
+      const fecha = parseFecha(fechaStr);
+
+      return { nombre, tipo, fecha, hora, recinto, descripcion: desc, link, lat, lon };
+    };
+
+    // --- mapa ---
+    var map = L.map('map').setView([40.4167, -3.70325], 6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    const iconos = {
-      FUTBOL: L.AwesomeMarkers.icon({ icon: 'futbol', prefix: 'fa', markerColor: 'green' }),
-      CONCIERTO: L.AwesomeMarkers.icon({ icon: 'music', prefix: 'fa', markerColor: 'blue' }),
-      OTROS: L.AwesomeMarkers.icon({ icon: 'star', prefix: 'fa', markerColor: 'red' }),
-      DEFAULT: L.AwesomeMarkers.icon({ icon: 'info', prefix: 'fa', markerColor: 'orange' })
-    };
-
-    var eventos = [], markers = [];
+    var eventos = [];
+    var markers = [];
     var sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQBgXQLiwgo23JJkp2QIOxK5OnMu-VCDTAghFzf0-C5S7gZGKe1Oi5sclWg2gWi1UM1N4Luxsd0zrY4/pub?output=csv";
 
-    // Fechas por defecto
     const setDefaultDates = () => {
       let hoy = new Date();
-      let unMes = new Date(hoy); unMes.setMonth(unMes.getMonth()+1);
-      const fmt = (d) => d.toISOString().split("T")[0];
+      let unMes = new Date(hoy);
+      unMes.setMonth(unMes.getMonth() + 1);
+      const fmt = (d) => {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      };
       document.getElementById("fechaInicio").value = fmt(hoy);
       document.getElementById("fechaFin").value = fmt(unMes);
     };
     setDefaultDates();
 
-    // Cargar eventos
     Papa.parse(sheetUrl, {
       download: true,
       header: true,
       skipEmptyLines: 'greedy',
-      complete: function(results){
-        eventos = results.data.map(normalizeRow).filter(e => Number.isFinite(e.lat) && Number.isFinite(e.lon) && e.nombre);
+      complete: function(results) {
+        eventos = results.data
+          .map(normalizeRow)
+          .filter(e => Number.isFinite(e.lat) && Number.isFinite(e.lon) && e.nombre);
 
-        const tipos = [...new Set(eventos.map(e => e.tipo).filter(t=>t))].sort();
+        const tipos = [...new Set(eventos.map(e => e.tipo).filter(t => t && t.trim() !== ""))].sort();
         const selectTipo = document.getElementById("tipo");
-        tipos.forEach(t=>{
+        tipos.forEach(t => {
           const opt = document.createElement("option");
-          opt.value=t; opt.textContent=t; selectTipo.appendChild(opt);
+          opt.value = t;
+          opt.textContent = t;
+          selectTipo.appendChild(opt);
         });
 
         document.getElementById("tipo").addEventListener("change", filtrar);
@@ -154,54 +168,47 @@
       }
     });
 
-    function mostrarEventos(fechaInicio, fechaFin, tipo){
-      markers.forEach(m=>map.removeLayer(m)); markers=[];
-      const fi=parseFecha(fechaInicio), ff=parseFecha(fechaFin); const bounds=[];
-      eventos.forEach(e=>{
-        if(tipo && e.tipo!==tipo) return;
-        if(fi && e.fecha && e.fecha<fi) return;
-        if(ff && e.fecha && e.fecha>ff) return;
-        const fechaTexto = e.fecha?e.fecha.toISOString().split("T")[0]:"";
-        const popup = `<b>${e.nombre}</b><br>`+
-                      `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>`+
-                      `<b>Fecha:</b> ${fechaTexto}<br>`+
-                      `<b>Hora:</b> ${e.hora || "Sin especificar"}<br>`+
-                      `${e.descripcion?`<br>${e.descripcion}`:""}`+
-                      `${e.link?`<br><a href="${e.link}" target="_blank">🔗 Más info</a>`:""}`;
-        const icon = iconos[e.tipo]||iconos.DEFAULT;
-        const marker = L.marker([e.lat,e.lon],{icon}).addTo(map).bindPopup(popup);
-        markers.push(marker); bounds.push([e.lat,e.lon]);
+    function mostrarEventos(fechaInicio = null, fechaFin = null, tipo = null) {
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+
+      const bounds = [];
+      eventos.forEach(e => {
+        if (tipo && String(e.tipo) !== String(tipo)) return;
+        if (fechaInicio) {
+          const fi = parseFecha(fechaInicio);
+          if (fi && e.fecha && e.fecha < fi) return;
+        }
+        if (fechaFin) {
+          const ff = parseFecha(fechaFin);
+          if (ff && e.fecha && e.fecha > ff) return;
+        }
+
+        let fechaTexto = e.fecha ? e.fecha.toISOString().slice(0,10) : "";
+        const popup =
+          `<b>${e.nombre}</b><br>` +
+          `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>` +
+          `<b>Fecha:</b> ${fechaTexto}<br>` +
+          `<b>Hora:</b> ${e.hora || "Sin especificar"}<br>` +
+          `${e.descripcion ? `<br>${e.descripcion}` : ""}` +
+          `${e.link ? `<br><a href="${e.link}" target="_blank" rel="noopener">🔗 Más info</a>` : ""}`;
+
+        const marker = L.marker([e.lat, e.lon]).addTo(map).bindPopup(popup);
+        markers.push(marker);
+        bounds.push([e.lat, e.lon]);
       });
-      if(bounds.length) map.fitBounds(bounds,{padding:[30,30]});
+
+      if (bounds.length) {
+        map.fitBounds(bounds, { padding: [30, 30] });
+      }
     }
 
-    function filtrar(){
-      mostrarEventos(
-        document.getElementById("fechaInicio").value,
-        document.getElementById("fechaFin").value,
-        document.getElementById("tipo").value
-      );
+    function filtrar() {
+      const inicio = document.getElementById("fechaInicio").value;
+      const fin = document.getElementById("fechaFin").value;
+      const tipo = document.getElementById("tipo").value;
+      mostrarEventos(inicio, fin, tipo);
     }
-
-    // Botón móvil
-    document.getElementById("menuBtn").addEventListener("click",()=>{
-      document.getElementById("filtros").classList.toggle("hidden");
-    });
-
-    // Leyenda
-    const legend=L.control({position:"bottomright"});
-    legend.onAdd=function(){
-      const div=L.DomUtil.create("div","legend");
-      div.innerHTML=`<b>Leyenda</b><br>
-        <i class="fa fa-futbol" style="color:green"></i> Fútbol<br>
-        <i class="fa fa-music" style="color:blue"></i> Concierto<br>
-        <i class="fa fa-star" style="color:red"></i> Otros<br>
-        <i class="fa fa-info" style="color:orange"></i> Resto`;
-      return div;
-    };
-    legend.addTo(map);
-
-  });
   </script>
 </body>
 </html>
