@@ -69,4 +69,111 @@
         return "";
       };
 
-      const nombre = pick('nombre', 'título', 'titulo', 'evento', '
+      const nombre = pick('nombre', 'título', 'titulo', 'evento', 'name');
+      const tipo = String(pick('tipo', 'categoria', 'type')).trim();
+      const fechaStr = pick('fecha', 'date', 'fecha_evento');
+      const hora = pick('hora', 'time');
+      const recinto = pick('recinto', 'venue', 'lugar', 'site', 'ubicacion', 'ubicación');
+      const desc = pick('descripcion', 'descripción', 'description', 'desc');
+      const link = pick('link', 'enlace', 'url');
+      const lat = toNum(pick('lat', 'latitud', 'latitude'));
+      const lon = toNum(pick('lon', 'lng', 'long', 'longitud', 'longitude'));
+      const fecha = parseFecha(fechaStr);
+
+      return { nombre, tipo, fecha, hora, recinto, descripcion: desc, link, lat, lon };
+    };
+
+    var map = L.map('map').setView([40.4167, -3.70325], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    var eventos = [];
+    var markers = [];
+    var sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQBgXQLiwgo23JJkp2QIOxK5OnMu-VCDTAghFzf0-C5S7gZGKe1Oi5sclWg2gWi1UM1N4Luxsd0zrY4/pub?output=csv";
+
+    const setDefaultDates = () => {
+      let hoy = new Date();
+      let unMes = new Date(hoy);
+      unMes.setMonth(unMes.getMonth() + 1);
+      const fmt = (d) => {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      };
+      document.getElementById("fechaInicio").value = fmt(hoy);
+      document.getElementById("fechaFin").value = fmt(unMes);
+    };
+    setDefaultDates();
+
+    Papa.parse(sheetUrl, {
+      download: true,
+      header: true,
+      skipEmptyLines: 'greedy',
+      complete: function(results) {
+        eventos = results.data
+          .map(normalizeRow)
+          .filter(e => Number.isFinite(e.lat) && Number.isFinite(e.lon) && e.nombre);
+
+        const tipos = [...new Set(eventos.map(e => e.tipo).filter(t => t && t.trim() !== ""))].sort();
+        const selectTipo = document.getElementById("tipo");
+        tipos.forEach(t => {
+          const opt = document.createElement("option");
+          opt.value = t;
+          opt.textContent = t;
+          selectTipo.appendChild(opt);
+        });
+
+        document.getElementById("tipo").addEventListener("change", filtrar);
+        document.getElementById("fechaInicio").addEventListener("change", filtrar);
+        document.getElementById("fechaFin").addEventListener("change", filtrar);
+
+        filtrar();
+      }
+    });
+
+    function mostrarEventos(fechaInicio = null, fechaFin = null, tipo = null) {
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+
+      const bounds = [];
+      eventos.forEach(e => {
+        if (tipo && String(e.tipo) !== String(tipo)) return;
+        if (fechaInicio) {
+          const fi = parseFecha(fechaInicio);
+          if (fi && e.fecha && e.fecha < fi) return;
+        }
+        if (fechaFin) {
+          const ff = parseFecha(fechaFin);
+          if (ff && e.fecha && e.fecha > ff) return;
+        }
+
+        let fechaTexto = e.fecha ? e.fecha.toISOString().slice(0,10) : "";
+        const popup =
+          `<b>${e.nombre}</b><br>` +
+          `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>` +
+          `<b>Fecha:</b> ${fechaTexto}<br>` +
+          `<b>Hora:</b> ${e.hora || "Sin especificar"}<br>` +
+          `${e.descripcion ? `<br>${e.descripcion}` : ""}` +
+          `${e.link ? `<br><a href="${e.link}" target="_blank" rel="noopener">🔗 Más info</a>` : ""}`;
+
+        const marker = L.marker([e.lat, e.lon]).addTo(map).bindPopup(popup);
+        markers.push(marker);
+        bounds.push([e.lat, e.lon]);
+      });
+
+      if (bounds.length) {
+        map.fitBounds(bounds, { padding: [30, 30] });
+      }
+    }
+
+    function filtrar() {
+      const inicio = document.getElementById("fechaInicio").value;
+      const fin = document.getElementById("fechaFin").value;
+      const tipo = document.getElementById("tipo").value;
+      mostrarEventos(inicio, fin, tipo);
+    }
+  </script>
+</body>
+</html>
