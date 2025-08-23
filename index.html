@@ -1,33 +1,232 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
   <title>MapHub</title>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
-    body { margin: 0; font-family: sans-serif; }
-    #map { height: 85vh; }
-    #filtros { padding: 10px; background: #f9f9f9; border-bottom: 1px solid #ccc; }
-    label { margin-right: 10px; }
+    * { 
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body { 
+      margin: 0; 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f8f9fa;
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    
+    #filtros { 
+      padding: 12px 15px; 
+      background: white; 
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    
+    label { 
+      font-weight: 500;
+      font-size: 0.85rem;
+      color: #424242;
+      white-space: nowrap;
+    }
+    
+    input, select {
+      padding: 8px 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      background-color: #f9f9f9;
+    }
+    
+    input:focus, select:focus {
+      outline: none;
+      border-color: #4a90e2;
+      box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+    }
+    
+    button {
+      padding: 8px 14px;
+      background-color: #4a90e2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+    
+    button:hover {
+      background-color: #3a80d2;
+    }
+    
+    #map { 
+      flex: 1; 
+      width: 100%;
+      z-index: 1;
+    }
+    
+    .event-count {
+      margin-left: auto;
+      background: #6c757d;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+    
+    /* Responsive styles */
+    @media (max-width: 992px) {
+      #filtros {
+        padding: 10px 12px;
+        gap: 8px;
+      }
+      
+      .filter-group {
+        flex: 1;
+        min-width: calc(50% - 10px);
+      }
+      
+      input, select, button {
+        width: 100%;
+      }
+      
+      label {
+        min-width: 50px;
+      }
+    }
+    
+    @media (max-width: 576px) {
+      #filtros {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        padding: 10px;
+      }
+      
+      .filter-group {
+        min-width: 100%;
+        flex-direction: row;
+        justify-content: space-between;
+      }
+      
+      label {
+        flex: 1;
+      }
+      
+      input, select {
+        flex: 2;
+      }
+      
+      button {
+        margin-top: 5px;
+        width: 100%;
+      }
+      
+      .event-count {
+        margin: 5px 0 0 0;
+        text-align: center;
+        align-self: center;
+        width: auto;
+        display: inline-block;
+      }
+    }
+    
+    .leaflet-popup-content {
+      font-size: 0.9rem;
+      line-height: 1.4;
+      margin: 15px;
+    }
+    
+    .leaflet-popup-content b {
+      color: #2c3e50;
+    }
+    
+    .leaflet-popup-content a {
+      color: #3498db;
+      text-decoration: none;
+      display: inline-block;
+      margin-top: 8px;
+    }
+    
+    .leaflet-popup-content a:hover {
+      text-decoration: underline;
+    }
+    
+    .loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255, 255, 255, 0.95);
+      padding: 20px 25px;
+      border-radius: 8px;
+      text-align: center;
+      z-index: 1000;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+      font-size: 0.95rem;
+    }
   </style>
 </head>
 <body>
-  <div id="filtros">
-    <label for="fechaInicio">Desde: </label>
-    <input type="date" id="fechaInicio" />
-    <label for="fechaFin">Hasta: </label>
-    <input type="date" id="fechaFin" />
-    <label for="tipo">Tipo: </label>
-    <select id="tipo">
-      <option value="">Todos</option>
-    </select>
-    <button onclick="filtrar()">Filtrar</button>
+  <div class="container">
+    <div id="filtros">
+      <div class="filter-group">
+        <label for="fechaInicio">Desde:</label>
+        <input type="date" id="fechaInicio" />
+      </div>
+      
+      <div class="filter-group">
+        <label for="fechaFin">Hasta:</label>
+        <input type="date" id="fechaFin" />
+      </div>
+      
+      <div class="filter-group">
+        <label for="tipo">Tipo:</label>
+        <select id="tipo">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      
+      <button onclick="filtrar()">Filtrar</button>
+      
+      <span id="contador" class="event-count">0 eventos</span>
+    </div>
+    
+    <div id="map"></div>
+    
+    <div id="loading" class="loading" style="display: none;">
+      <p>Cargando eventos...</p>
+    </div>
   </div>
-  <div id="map"></div>
 
   <script>
+    // Mostrar indicador de carga
+    document.getElementById('loading').style.display = 'block';
+    
     const toNum = (v) => {
       if (v === null || v === undefined) return NaN;
       return parseFloat(String(v).replace(',', '.'));
@@ -51,6 +250,21 @@
       }
       const d = new Date(s);
       return isNaN(d) ? null : d;
+    };
+    
+    // Función para formatear fechas en formato local (DD/MM/AAAA)
+    const formatFecha = (fecha) => {
+      if (!fecha) return "Sin especificar";
+      
+      try {
+        return fecha.toLocaleDateString('es-ES', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        });
+      } catch (e) {
+        return "Fecha inválida";
+      }
     };
 
     const normalizeRow = (row) => {
@@ -129,7 +343,15 @@
         document.getElementById("fechaInicio").addEventListener("change", filtrar);
         document.getElementById("fechaFin").addEventListener("change", filtrar);
 
+        // Ocultar indicador de carga
+        document.getElementById('loading').style.display = 'none';
+        
         filtrar();
+      },
+      error: function(error) {
+        document.getElementById('loading').innerHTML = 
+          '<p>Error al cargar los datos. Por favor, intenta nuevamente.</p>';
+        console.error("Error loading CSV:", error);
       }
     });
 
@@ -138,6 +360,8 @@
       markers = [];
 
       const bounds = [];
+      let eventosFiltrados = 0;
+      
       eventos.forEach(e => {
         if (tipo && String(e.tipo) !== String(tipo)) return;
         if (fechaInicio) {
@@ -149,22 +373,31 @@
           if (ff && e.fecha && e.fecha > ff) return;
         }
 
-        let fechaTexto = e.fecha ? e.fecha.toISOString().slice(0,10) : "";
+        eventosFiltrados++;
+        
         const popup =
-          `<b>${e.nombre}</b><br>` +
-          `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>` +
-          `<b>Fecha:</b> ${fechaTexto}<br>` +
-          `<b>Hora:</b> ${e.hora || "Sin especificar"}<br>` +
-          `${e.descripcion ? `<br>${e.descripcion}` : ""}` +
-          `${e.link ? `<br><a href="${e.link}" target="_blank" rel="noopener">🔗 Más info</a>` : ""}`;
+          `<div style="min-width: 200px;">
+            <b style="display: block; margin-bottom: 8px; color: #2c3e50;">${e.nombre}</b>
+            <div style="margin-bottom: 5px;"><b>Recinto:</b> ${e.recinto || "Sin especificar"}</div>
+            <div style="margin-bottom: 5px;"><b>Fecha:</b> ${formatFecha(e.fecha)}</div>
+            <div style="margin-bottom: 5px;"><b>Hora:</b> ${e.hora || "Sin especificar"}</div>
+            <div style="margin-bottom: 8px;"><b>Tipo:</b> ${e.tipo || "Sin especificar"}</div>
+            ${e.descripcion ? `<div style="margin-bottom: 10px;">${e.descripcion}</div>` : ""}
+            ${e.link ? `<a href="${e.link}" target="_blank" rel="noopener">🔗 Más información</a>` : ""}
+          </div>`;
 
         const marker = L.marker([e.lat, e.lon]).addTo(map).bindPopup(popup);
         markers.push(marker);
         bounds.push([e.lat, e.lon]);
       });
 
+      // Actualizar contador
+      document.getElementById('contador').textContent = `${eventosFiltrados} eventos`;
+      
       if (bounds.length) {
-        map.fitBounds(bounds, { padding: [30, 30] });
+        // Ajustar el zoom para dispositivos móviles
+        const isMobile = window.innerWidth <= 576;
+        map.fitBounds(bounds, { padding: isMobile ? [20, 20] : [30, 30], maxZoom: isMobile ? 12 : 15 });
       }
     }
 
@@ -174,6 +407,13 @@
       const tipo = document.getElementById("tipo").value;
       mostrarEventos(inicio, fin, tipo);
     }
+    
+    // Ajustar el mapa cuando cambia el tamaño de la ventana
+    window.addEventListener('resize', function() {
+      map.invalidateSize();
+      // Re-filtrar para ajustar el zoom si es necesario
+      setTimeout(filtrar, 100);
+    });
   </script>
 </body>
 </html>
