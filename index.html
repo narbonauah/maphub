@@ -26,9 +26,6 @@
     <label for="tipo">Tipo: </label>
     <select id="tipo">
       <option value="">Todos</option>
-      <option value="FUTBOL">Fútbol</option>
-      <option value="CONCIERTO">Concierto</option>
-      <option value="OTROS">Otros</option>
     </select>
     <button onclick="filtrar()">Filtrar</button>
   </div>
@@ -54,7 +51,6 @@
       let unMesDespues = new Date();
       unMesDespues.setMonth(unMesDespues.getMonth() + 1);
 
-      // Formato YYYY-MM-DD
       let formatoFecha = (d) => d.toISOString().split("T")[0];
 
       document.getElementById("fechaInicio").value = formatoFecha(hoy);
@@ -67,6 +63,17 @@
       header: true,
       complete: function(results) {
         eventos = results.data;
+
+        // Generar automáticamente las opciones del selector de tipo
+        let tipos = [...new Set(eventos.map(e => e.tipo).filter(t => t && t.trim() !== ""))];
+        let selectTipo = document.getElementById("tipo");
+        tipos.forEach(t => {
+          let opt = document.createElement("option");
+          opt.value = t;
+          opt.textContent = t;
+          selectTipo.appendChild(opt);
+        });
+
         // Mostramos por defecto con el rango inicial
         filtrar();
       }
@@ -95,24 +102,4 @@
             `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>` +
             `${e.descripcion || ""}`;
 
-          if (e.link) {
-            popupContent += `<br><a href="${e.link}" target="_blank">🔗 Más info</a>`;
-          }
-
-          let marker = L.marker([e.lat, e.lon]).addTo(map)
-            .bindPopup(popupContent);
-
-          markers.push(marker);
-        }
-      });
-    }
-
-    // Filtro por rango de fechas y tipo
-    function filtrar() {
-      var inicio = document.getElementById("fechaInicio").value;
-      var fin = document.getElementById("fechaFin").value;
-      var tipo = document.getElementById("tipo").value;
-      mostrarEventos(inicio, fin, tipo);
-    }
-  </script>
-</body>
+          if
