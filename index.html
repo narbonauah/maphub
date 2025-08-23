@@ -24,15 +24,16 @@
       flex-direction: column;
       gap: 10px;
       transition: transform 0.3s ease;
-      z-index: 1000;
+      z-index: 2000; /* Mayor que el mapa */
+      position: relative;
     }
     #filtros.hidden { transform: translateX(-100%); }
-    #map { flex: 1; }
+    #map { flex: 1; position: relative; z-index: 1; }
     #menuBtn {
       display: none;
       position: absolute;
       top: 10px; left: 10px;
-      z-index: 1100;
+      z-index: 2100;
       background: white;
       border: 1px solid #ccc;
       border-radius: 5px;
@@ -46,8 +47,7 @@
         position: absolute;
         top: 0; left: 0; bottom: 0;
         width: 250px;
-        z-index: 999;
-        background: #fff;
+        z-index: 2000;
         box-shadow: 2px 0 5px rgba(0,0,0,0.2);
       }
       #menuBtn { display: block; }
@@ -59,6 +59,7 @@
       line-height: 20px;
       border-radius: 5px;
       font-size: 13px;
+      z-index: 2000;
     }
     .legend i {
       width: 18px; height: 18px;
@@ -69,7 +70,7 @@
 </head>
 <body>
   <button id="menuBtn">☰</button>
-  <div id="filtros" class="hidden">
+  <div id="filtros" class="">
     <label for="fechaInicio">Desde:</label>
     <input type="date" id="fechaInicio" />
     <label for="fechaFin">Hasta:</label>
@@ -84,22 +85,11 @@
 
   <script>
     // --- Utilidades ---
-    const toNum = (v) => {
-      if (v === null || v === undefined) return NaN;
-      return parseFloat(String(v).replace(',', '.'));
-    };
-    const parseFecha = (s) => {
-      if (!s) return null;
-      const d = new Date(s);
-      return isNaN(d) ? null : d;
-    };
+    const toNum = (v) => { if (v === null || v === undefined) return NaN; return parseFloat(String(v).replace(',', '.')); };
+    const parseFecha = (s) => { if (!s) return null; const d = new Date(s); return isNaN(d) ? null : d; };
     const normalizeRow = (row) => {
-      const lower = {};
-      Object.keys(row).forEach(k => lower[k.toLowerCase().trim()] = row[k]);
-      const pick = (...candidatos) => {
-        for (const c of candidatos) if (c in lower && String(lower[c]).trim() !== "") return lower[c];
-        return "";
-      };
+      const lower = {}; Object.keys(row).forEach(k => lower[k.toLowerCase().trim()] = row[k]);
+      const pick = (...c) => { for (const k of c) if (k in lower && String(lower[k]).trim() !== "") return lower[k]; return ""; };
       return {
         nombre: pick('nombre','evento','titulo'),
         tipo: pick('tipo','categoria'),
@@ -121,7 +111,7 @@
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    // --- Iconos AwesomeMarkers ---
+    // --- Iconos ---
     const iconos = {
       FUTBOL: L.AwesomeMarkers.icon({ icon: 'futbol', prefix: 'fa', markerColor: 'green' }),
       CONCIERTO: L.AwesomeMarkers.icon({ icon: 'music', prefix: 'fa', markerColor: 'blue' }),
@@ -134,8 +124,7 @@
 
     const setDefaultDates = () => {
       let hoy = new Date();
-      let unMes = new Date(hoy);
-      unMes.setMonth(unMes.getMonth() + 1);
+      let unMes = new Date(hoy); unMes.setMonth(unMes.getMonth()+1);
       const fmt = (d) => d.toISOString().split("T")[0];
       document.getElementById("fechaInicio").value = fmt(hoy);
       document.getElementById("fechaFin").value = fmt(unMes);
@@ -146,61 +135,46 @@
       download: true,
       header: true,
       skipEmptyLines: 'greedy',
-      complete: function(results) {
-        eventos = results.data
-          .map(normalizeRow)
-          .filter(e => Number.isFinite(e.lat) && Number.isFinite(e.lon) && e.nombre);
+      complete: function(results){
+        eventos = results.data.map(normalizeRow).filter(e => Number.isFinite(e.lat) && Number.isFinite(e.lon) && e.nombre);
 
-        // Rellenar selector de tipo
-        const tipos = [...new Set(eventos.map(e => e.tipo).filter(t => t))].sort();
+        const tipos = [...new Set(eventos.map(e => e.tipo).filter(t=>t))].sort();
         const selectTipo = document.getElementById("tipo");
-        tipos.forEach(t => {
+        tipos.forEach(t=>{
           const opt = document.createElement("option");
-          opt.value = t;
-          opt.textContent = t;
-          selectTipo.appendChild(opt);
+          opt.value=t; opt.textContent=t; selectTipo.appendChild(opt);
         });
 
+        // Filtrado dinámico
         document.getElementById("tipo").addEventListener("change", filtrar);
         document.getElementById("fechaInicio").addEventListener("change", filtrar);
         document.getElementById("fechaFin").addEventListener("change", filtrar);
-
         filtrar();
       }
     });
 
-    function mostrarEventos(fechaInicio, fechaFin, tipo) {
-      markers.forEach(m => map.removeLayer(m));
-      markers = [];
-
-      const fi = parseFecha(fechaInicio);
-      const ff = parseFecha(fechaFin);
-      const bounds = [];
-
-      eventos.forEach(e => {
-        if (tipo && e.tipo !== tipo) return;
-        if (fi && e.fecha && e.fecha < fi) return;
-        if (ff && e.fecha && e.fecha > ff) return;
-
-        const fechaTexto = e.fecha ? e.fecha.toISOString().split("T")[0] : "";
-        const popup =
-          `<b>${e.nombre}</b><br>` +
-          `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>` +
-          `<b>Fecha:</b> ${fechaTexto}<br>` +
-          `<b>Hora:</b> ${e.hora || "Sin especificar"}<br>` +
-          `${e.descripcion ? `<br>${e.descripcion}` : ""}` +
-          `${e.link ? `<br><a href="${e.link}" target="_blank">🔗 Más info</a>` : ""}`;
-
-        const icon = iconos[e.tipo] || iconos.DEFAULT;
-        const marker = L.marker([e.lat, e.lon], { icon }).addTo(map).bindPopup(popup);
-        markers.push(marker);
-        bounds.push([e.lat, e.lon]);
+    function mostrarEventos(fechaInicio, fechaFin, tipo){
+      markers.forEach(m=>map.removeLayer(m)); markers=[];
+      const fi=parseFecha(fechaInicio), ff=parseFecha(fechaFin); const bounds=[];
+      eventos.forEach(e=>{
+        if(tipo && e.tipo!==tipo) return;
+        if(fi && e.fecha && e.fecha<fi) return;
+        if(ff && e.fecha && e.fecha>ff) return;
+        const fechaTexto = e.fecha?e.fecha.toISOString().split("T")[0]:"";
+        const popup = `<b>${e.nombre}</b><br>`+
+                      `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>`+
+                      `<b>Fecha:</b> ${fechaTexto}<br>`+
+                      `<b>Hora:</b> ${e.hora || "Sin especificar"}<br>`+
+                      `${e.descripcion?`<br>${e.descripcion}`:""}`+
+                      `${e.link?`<br><a href="${e.link}" target="_blank">🔗 Más info</a>`:""}`;
+        const icon = iconos[e.tipo]||iconos.DEFAULT;
+        const marker = L.marker([e.lat,e.lon],{icon}).addTo(map).bindPopup(popup);
+        markers.push(marker); bounds.push([e.lat,e.lon]);
       });
-
-      if (bounds.length) map.fitBounds(bounds, { padding: [30, 30] });
+      if(bounds.length) map.fitBounds(bounds,{padding:[30,30]});
     }
 
-    function filtrar() {
+    function filtrar(){
       mostrarEventos(
         document.getElementById("fechaInicio").value,
         document.getElementById("fechaFin").value,
@@ -208,22 +182,20 @@
       );
     }
 
-    // --- Toggle menú móvil ---
-    document.getElementById("menuBtn").addEventListener("click", () => {
+    // --- Botón móvil ---
+    document.getElementById("menuBtn").addEventListener("click",()=>{
       document.getElementById("filtros").classList.toggle("hidden");
     });
 
     // --- Leyenda ---
-    const legend = L.control({ position: "bottomright" });
-    legend.onAdd = function () {
-      const div = L.DomUtil.create("div", "legend");
-      div.innerHTML = `
-        <b>Leyenda</b><br>
+    const legend=L.control({position:"bottomright"});
+    legend.onAdd=function(){
+      const div=L.DomUtil.create("div","legend");
+      div.innerHTML=`<b>Leyenda</b><br>
         <i class="fa fa-futbol" style="color:green"></i> Fútbol<br>
         <i class="fa fa-music" style="color:blue"></i> Concierto<br>
         <i class="fa fa-star" style="color:red"></i> Otros<br>
-        <i class="fa fa-info" style="color:orange"></i> Resto
-      `;
+        <i class="fa fa-info" style="color:orange"></i> Resto`;
       return div;
     };
     legend.addTo(map);
