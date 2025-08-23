@@ -32,7 +32,7 @@
     .side-panel {
       width: 320px;
       background: white;
-      box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+      box-shadow: 2px 0 10px rgba(0,0,0,0.2);
       display: flex;
       flex-direction: column;
       z-index: 1000;
@@ -44,7 +44,7 @@
       background: #3498db;
       color: white;
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
       align-items: center;
     }
     
@@ -128,7 +128,7 @@
       width: 50px;
       height: 50px;
       box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-      display: none;
+      display: flex;
       align-items: center;
       justify-content: center;
       font-size: 20px;
@@ -152,9 +152,11 @@
     }
     
     /* Estilos para el control de zoom de Leaflet */
+    .leaflet-top.leaflet-right {
+      margin-top: 80px !important;
+    }
+    
     .leaflet-control-zoom {
-      margin-top: 75px !important;
-      margin-right: 15px !important;
       border: none !important;
       box-shadow: 0 2px 5px rgba(0,0,0,0.2) !important;
     }
@@ -197,6 +199,7 @@
       
       .side-panel.active {
         transform: translateX(0);
+        box-shadow: 2px 0 15px rgba(0,0,0,0.3);
       }
       
       .toggle-panel {
@@ -242,6 +245,22 @@
       margin-top: 10px;
       font-weight: 600;
     }
+    
+    .close-btn {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      width: auto;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .close-btn:hover {
+      background: none;
+      color: #f1f1f1;
+    }
   </style>
 </head>
 <body>
@@ -249,8 +268,7 @@
     <!-- Panel lateral -->
     <div class="side-panel" id="sidePanel">
       <div class="panel-header">
-        <h2>Filtros de Eventos</h2>
-        <button class="close-panel" onclick="togglePanel()" style="background: none; border: none; color: white; font-size: 20px; width: auto;">
+        <button class="close-btn" onclick="togglePanel()">
           <i class="fas fa-times"></i>
         </button>
       </div>
@@ -283,7 +301,7 @@
     <!-- Contenedor del mapa -->
     <div id="map-container">
       <button class="toggle-panel" onclick="togglePanel()">
-        <i class="fas fa-bars"></i>
+        <i class="fas fa-filter"></i>
       </button>
       <div id="map"></div>
     </div>
@@ -302,6 +320,16 @@
     function togglePanel() {
       const panel = document.getElementById('sidePanel');
       panel.classList.toggle('active');
+      
+      // Cambiar el icono según el estado
+      const toggleBtn = document.querySelector('.toggle-panel i');
+      if (panel.classList.contains('active')) {
+        toggleBtn.classList.remove('fa-filter');
+        toggleBtn.classList.add('fa-times');
+      } else {
+        toggleBtn.classList.remove('fa-times');
+        toggleBtn.classList.add('fa-filter');
+      }
     }
     
     const toNum = (v) => {
@@ -491,7 +519,7 @@
       
       // En móviles, cerrar el panel después de filtrar
       if (window.innerWidth <= 992) {
-        document.getElementById('sidePanel').classList.remove('active');
+        togglePanel();
       }
     }
     
