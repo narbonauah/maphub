@@ -9,11 +9,7 @@
   <style>
     body { margin: 0; font-family: sans-serif; }
     #map { height: 85vh; }
-    #filtros {
-      padding: 10px;
-      background: #f9f9f9;
-      border-bottom: 1px solid #ccc;
-    }
+    #filtros { padding: 10px; background: #f9f9f9; border-bottom: 1px solid #ccc; }
     label { margin-right: 10px; }
   </style>
 </head>
@@ -27,15 +23,83 @@
     <select id="tipo">
       <option value="">Todos</option>
     </select>
-    <!-- Botón ya no es necesario, pero lo dejamos por si acaso -->
+    <!-- Botón opcional: lo dejamos por si quieres usarlo manualmente -->
     <button onclick="filtrar()">Filtrar</button>
   </div>
   <div id="map"></div>
 
   <script>
-    var map = L.map('map').setView([40.4167, -3.70325], 6);
+    // --------- Helpers robustos ---------
+    const toNum = (v) => {
+      if (v === null || v === undefined) return NaN;
+      return parseFloat(String(v).replace(',', '.'));
+    };
 
-    // Capa base
+    // Acepta "YYYY-MM-DD" o "DD/MM/YYYY"
+    const parseFecha = (s) => {
+      if (!s) return null;
+      s = String(s).trim();
+      // ISO
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        const d = new Date(s + "T00:00:00");
+        return isNaN(d) ? null : d;
+      }
+      // dd/mm/yyyy (asumimos ES)
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (m) {
+        const dd = parseInt(m[1], 10);
+        const mm = parseInt(m[2], 10) - 1;
+        let yyyy = parseInt(m[3], 10);
+        if (yyyy < 100) yyyy += 2000; // 25 -> 2025
+        const d = new Date(yyyy, mm, dd);
+        return isNaN(d) ? null : d;
+      }
+      // Último intento: Date nativo
+      const d = new Date(s);
+      return isNaN(d) ? null : d;
+    };
+
+    // Normaliza claves de una fila (admite sinonimias comunes)
+    const normalizeRow = (row) => {
+      // Mapa por heurística (claves en minúsculas)
+      const lower = {};
+      Object.keys(row).forEach(k => lower[k.toLowerCase().trim()] = row[k]);
+
+      const pick = (...candidatos) => {
+        for (const c of candidatos) {
+          if (c in lower && String(lower[c]).trim() !== "") return lower[c];
+        }
+        // búsqueda heurística por contiene
+        for (const key of Object.keys(lower)) {
+          if (candidatos.some(c => key.includes(c))) {
+            if (String(lower[key]).trim() !== "") return lower[key];
+          }
+        }
+        return "";
+      };
+
+      const nombre = pick('nombre', 'título', 'titulo', 'evento', 'name');
+      const tipo = String(pick('tipo', 'categoria', 'type')).trim();
+      const fechaStr = pick('fecha', 'date', 'fecha_evento');
+      const hora = pick('hora', 'time');
+      const recinto = pick('recinto', 'venue', 'lugar', 'site', 'ubicacion', 'ubicación');
+      const desc = pick('descripcion', 'descripción', 'description', 'desc');
+      const link = pick('link', 'enlace', 'url');
+
+      // lat / lon con variantes
+      const latRaw = pick('lat', 'latitud', 'latitude');
+      const lonRaw = pick('lon', 'lng', 'long', 'longitud', 'longitude');
+
+      const lat = toNum(latRaw);
+      const lon = toNum(lonRaw);
+
+      const fecha = parseFecha(fechaStr);
+
+      return { nombre, tipo, fecha, hora, recinto, descripcion: desc, link, lat, lon };
+    };
+
+    // --------- Mapa ---------
+    var map = L.map('map').setView([40.4167, -3.70325], 6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
@@ -43,88 +107,104 @@
     var eventos = [];
     var markers = [];
 
-    // URL pública de Google Sheets en CSV
+    // Tu Google Sheet (CSV publicado)
     var sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQBgXQLiwgo23JJkp2QIOxK5OnMu-VCDTAghFzf0-C5S7gZGKe1Oi5sclWg2gWi1UM1N4Luxsd0zrY4/pub?output=csv";
 
-    // Al cargar la página, ponemos las fechas por defecto
-    window.onload = function() {
+    // Fechas por defecto (hoy y +1 mes)
+    const setDefaultDates = () => {
       let hoy = new Date();
-      let unMesDespues = new Date();
-      unMesDespues.setMonth(unMesDespues.getMonth() + 1);
-
-      let formatoFecha = (d) => d.toISOString().split("T")[0];
-
-      document.getElementById("fechaInicio").value = formatoFecha(hoy);
-      document.getElementById("fechaFin").value = formatoFecha(unMesDespues);
+      let unMes = new Date(hoy);
+      unMes.setMonth(unMes.getMonth() + 1);
+      const fmt = (d) => {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      };
+      document.getElementById("fechaInicio").value = fmt(hoy);
+      document.getElementById("fechaFin").value = fmt(unMes);
     };
+    setDefaultDates();
 
-    // Cargar datos del Google Sheet
+    // Cargar Sheet
     Papa.parse(sheetUrl, {
       download: true,
       header: true,
+      skipEmptyLines: 'greedy',
       complete: function(results) {
-        eventos = results.data;
+        // Normalizamos y filtramos filas válidas
+        eventos = results.data
+          .map(normalizeRow)
+          .filter(e => Number.isFinite(e.lat) && Number.isFinite(e.lon) && e.nombre);
 
-        // Generar automáticamente las opciones del selector de tipo
-        let tipos = [...new Set(eventos.map(e => e.tipo).filter(t => t && t.trim() !== ""))];
-        let selectTipo = document.getElementById("tipo");
+        if (!eventos.length) {
+          console.warn("No se han encontrado eventos válidos. Revisa nombres de columnas y datos.");
+        }
+
+        // Poblar selector tipo (valores únicos limpios)
+        const tipos = [...new Set(eventos.map(e => e.tipo).filter(t => t && t.trim() !== ""))].sort();
+        const selectTipo = document.getElementById("tipo");
         tipos.forEach(t => {
-          let opt = document.createElement("option");
+          const opt = document.createElement("option");
           opt.value = t;
           opt.textContent = t;
           selectTipo.appendChild(opt);
         });
 
-        // Eventos automáticos al cambiar filtros
+        // Listeners: disparan filtro automáticamente
         document.getElementById("tipo").addEventListener("change", filtrar);
         document.getElementById("fechaInicio").addEventListener("change", filtrar);
         document.getElementById("fechaFin").addEventListener("change", filtrar);
 
-        // Mostrar por defecto
+        // Pintado inicial
         filtrar();
+      },
+      error: function(err) {
+        console.error("Error cargando CSV de Google Sheets:", err);
+        alert("No se pudo cargar el CSV de Google Sheets. Verifica que esté 'Publicado en la web' como CSV.");
       }
     });
 
-    // Mostrar eventos en el mapa según filtros
     function mostrarEventos(fechaInicio = null, fechaFin = null, tipo = null) {
-      // Borrar marcadores anteriores
+      // Limpiar marcadores
       markers.forEach(m => map.removeLayer(m));
       markers = [];
 
+      const bounds = [];
       eventos.forEach(e => {
-        if (!e.lat || !e.lon) return; // Evitar filas vacías
+        // Filtros
+        if (tipo && String(e.tipo) !== String(tipo)) return;
 
-        let fecha = e.fecha;
-
-        // Comprobar filtros
-        if (
-          (!fechaInicio || fecha >= fechaInicio) &&
-          (!fechaFin || fecha <= fechaFin) &&
-          (!tipo || e.tipo === tipo)
-        ) {
-          let popupContent =
-            `<b>${e.nombre}</b><br>` +
-            `${e.tipo} - ${e.fecha} ${e.hora}<br>` +
-            `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>` +
-            `${e.descripcion || ""}`;
-
-          if (e.link) {
-            popupContent += `<br><a href="${e.link}" target="_blank">🔗 Más info</a>`;
-          }
-
-          let marker = L.marker([e.lat, e.lon]).addTo(map)
-            .bindPopup(popupContent);
-
-          markers.push(marker);
+        if (fechaInicio) {
+          const fi = parseFecha(fechaInicio);
+          if (fi && e.fecha && e.fecha < fi) return;
         }
+        if (fechaFin) {
+          const ff = parseFecha(fechaFin);
+          if (ff && e.fecha && e.fecha > ff) return;
+        }
+
+        const popup =
+          `<b>${e.nombre}</b><br>` +
+          `${e.tipo ? e.tipo + " - " : ""}${e.fecha ? e.fecha.toISOString().slice(0,10) : ""} ${e.hora || ""}<br>` +
+          `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>` +
+          `${e.descripcion ? e.descripcion : ""}` +
+          `${e.link ? `<br><a href="${e.link}" target="_blank" rel="noopener">🔗 Más info</a>` : ""}`;
+
+        const marker = L.marker([e.lat, e.lon]).addTo(map).bindPopup(popup);
+        markers.push(marker);
+        bounds.push([e.lat, e.lon]);
       });
+
+      if (bounds.length) {
+        map.fitBounds(bounds, { padding: [30, 30] });
+      }
     }
 
-    // Filtro por rango de fechas y tipo
     function filtrar() {
-      var inicio = document.getElementById("fechaInicio").value;
-      var fin = document.getElementById("fechaFin").value;
-      var tipo = document.getElementById("tipo").value;
+      const inicio = document.getElementById("fechaInicio").value;
+      const fin = document.getElementById("fechaFin").value;
+      const tipo = document.getElementById("tipo").value;
       mostrarEventos(inicio, fin, tipo);
     }
   </script>
