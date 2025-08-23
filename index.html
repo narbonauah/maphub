@@ -48,13 +48,27 @@
     // URL pública de Google Sheets en CSV
     var sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQBgXQLiwgo23JJkp2QIOxK5OnMu-VCDTAghFzf0-C5S7gZGKe1Oi5sclWg2gWi1UM1N4Luxsd0zrY4/pub?output=csv";
 
+    // Al cargar la página, ponemos las fechas por defecto
+    window.onload = function() {
+      let hoy = new Date();
+      let unMesDespues = new Date();
+      unMesDespues.setMonth(unMesDespues.getMonth() + 1);
+
+      // Formato YYYY-MM-DD
+      let formatoFecha = (d) => d.toISOString().split("T")[0];
+
+      document.getElementById("fechaInicio").value = formatoFecha(hoy);
+      document.getElementById("fechaFin").value = formatoFecha(unMesDespues);
+    };
+
     // Cargar datos del Google Sheet
     Papa.parse(sheetUrl, {
       download: true,
       header: true,
       complete: function(results) {
         eventos = results.data;
-        mostrarEventos();
+        // Mostramos por defecto con el rango inicial
+        filtrar();
       }
     });
 
@@ -81,7 +95,6 @@
             `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>` +
             `${e.descripcion || ""}`;
 
-          // Si hay link, añadir botón
           if (e.link) {
             popupContent += `<br><a href="${e.link}" target="_blank">🔗 Más info</a>`;
           }
@@ -103,4 +116,3 @@
     }
   </script>
 </body>
-</html>
