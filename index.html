@@ -3,47 +3,14 @@
 <head>
   <title>MapHub</title>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- importante para móviles -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
     body { margin: 0; font-family: sans-serif; }
-    #map { height: 80vh; }
-
-    /* Bloque de filtros */
-    #filtros {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px;
-      padding: 10px;
-      background: #f9f9f9;
-      border-bottom: 1px solid #ccc;
-    }
-
-    #filtros label {
-      font-size: 14px;
-    }
-
-    #filtros input, #filtros select, #filtros button {
-      padding: 5px;
-      font-size: 14px;
-    }
-
-    /* Responsive para pantallas pequeñas */
-    @media (max-width: 600px) {
-      #filtros {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-      #filtros label {
-        margin: 5px 0 0 0;
-      }
-      #map {
-        height: 75vh; /* un poco más bajo para dejar espacio a los filtros */
-      }
-    }
+    #map { height: 85vh; }
+    #filtros { padding: 10px; background: #f9f9f9; border-bottom: 1px solid #ccc; }
+    label { margin-right: 10px; }
   </style>
 </head>
 <body>
@@ -61,7 +28,6 @@
   <div id="map"></div>
 
   <script>
-    // --- utilidades de parseo ---
     const toNum = (v) => {
       if (v === null || v === undefined) return NaN;
       return parseFloat(String(v).replace(',', '.'));
@@ -117,7 +83,6 @@
       return { nombre, tipo, fecha, hora, recinto, descripcion: desc, link, lat, lon };
     };
 
-    // --- mapa ---
     var map = L.map('map').setView([40.4167, -3.70325], 6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
