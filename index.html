@@ -3,14 +3,14 @@
 <head>
   <title>MapHub</title>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- clave para móviles -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
     body { margin: 0; font-family: sans-serif; display: flex; height: 100vh; }
 
-    /* Panel lateral de filtros */
+    /* Sidebar */
     #filtros {
       width: 250px;
       padding: 10px;
@@ -19,10 +19,10 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
+      transition: transform 0.3s ease;
     }
-
-    #filtros label {
-      font-size: 14px;
+    #filtros.hidden {
+      transform: translateX(-100%);
     }
 
     #filtros input, #filtros select, #filtros button {
@@ -31,32 +31,56 @@
       width: 100%;
     }
 
-    /* Contenedor del mapa ocupa el resto */
-    #map {
-      flex: 1;
+    #map { flex: 1; }
+
+    /* Botón menú en móvil */
+    #menuBtn {
+      display: none;
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      padding: 6px 10px;
+      font-size: 18px;
+      cursor: pointer;
     }
 
-    /* En móvil: filtros como sidebar colapsable */
     @media (max-width: 768px) {
       body { flex-direction: column; }
       #filtros {
-        width: 100%;
-        border-right: none;
-        border-bottom: 1px solid #ccc;
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 5px;
+        position: absolute;
+        top: 0; left: 0; bottom: 0;
+        width: 250px;
+        z-index: 999;
+        background: #fff;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.2);
       }
-      #filtros label { display: none; } /* quitamos etiquetas para que no ocupe */
-      #filtros input, #filtros select, #filtros button {
-        flex: 1;
-        min-width: 90px;
-      }
+      #menuBtn { display: block; }
+      #map { flex: 1; }
+    }
+
+    /* Leyenda */
+    .legend {
+      background: white;
+      padding: 8px;
+      line-height: 20px;
+      border-radius: 5px;
+      font-size: 13px;
+    }
+    .legend img {
+      vertical-align: middle;
+      margin-right: 5px;
+      width: 18px;
+      height: 18px;
     }
   </style>
 </head>
 <body>
-  <div id="filtros">
+  <button id="menuBtn">☰</button>
+  <div id="filtros" class="hidden">
     <label for="fechaInicio">Desde:</label>
     <input type="date" id="fechaInicio" />
     <label for="fechaFin">Hasta:</label>
@@ -70,7 +94,7 @@
   <div id="map"></div>
 
   <script>
-    // --- utilidades ---
+    // --- Utilidades ---
     const toNum = (v) => {
       if (v === null || v === undefined) return NaN;
       return parseFloat(String(v).replace(',', '.'));
@@ -78,20 +102,6 @@
 
     const parseFecha = (s) => {
       if (!s) return null;
-      s = String(s).trim();
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-        const d = new Date(s + "T00:00:00");
-        return isNaN(d) ? null : d;
-      }
-      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-      if (m) {
-        const dd = parseInt(m[1], 10);
-        const mm = parseInt(m[2], 10) - 1;
-        let yyyy = parseInt(m[3], 10);
-        if (yyyy < 100) yyyy += 2000;
-        const d = new Date(yyyy, mm, dd);
-        return isNaN(d) ? null : d;
-      }
       const d = new Date(s);
       return isNaN(d) ? null : d;
     };
@@ -112,25 +122,53 @@
         return "";
       };
 
-      const nombre = pick('nombre', 'título', 'titulo', 'evento', 'name');
+      const nombre = pick('nombre', 'evento', 'titulo', 'name');
       const tipo = String(pick('tipo', 'categoria', 'type')).trim();
-      const fechaStr = pick('fecha', 'date', 'fecha_evento');
+      const fechaStr = pick('fecha', 'date');
       const hora = pick('hora', 'time');
-      const recinto = pick('recinto', 'venue', 'lugar', 'site', 'ubicacion', 'ubicación');
-      const desc = pick('descripcion', 'descripción', 'description', 'desc');
-      const link = pick('link', 'enlace', 'url');
-      const lat = toNum(pick('lat', 'latitud', 'latitude'));
-      const lon = toNum(pick('lon', 'lng', 'long', 'longitud', 'longitude'));
+      const recinto = pick('recinto', 'lugar', 'venue');
+      const desc = pick('descripcion', 'descripción', 'description');
+      const link = pick('link', 'url');
+      const lat = toNum(pick('lat', 'latitud'));
+      const lon = toNum(pick('lon', 'lng', 'longitud'));
       const fecha = parseFecha(fechaStr);
 
       return { nombre, tipo, fecha, hora, recinto, descripcion: desc, link, lat, lon };
     };
 
-    // --- mapa ---
+    // --- Mapa ---
     var map = L.map('map').setView([40.4167, -3.70325], 6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
+
+    // --- Iconos personalizados ---
+    const iconos = {
+      FUTBOL: L.icon({
+        iconUrl: "https://cdn-icons-png.flaticon.com/512/3011/3011346.png", // ⚽
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32]
+      }),
+      CONCIERTO: L.icon({
+        iconUrl: "https://cdn-icons-png.flaticon.com/512/727/727240.png", // 🎵
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32]
+      }),
+      OTROS: L.icon({
+        iconUrl: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32]
+      }),
+      DEFAULT: L.icon({
+        iconUrl: "https://maps.google.com/mapfiles/ms/icons/yellow-dot.png",
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32]
+      })
+    };
 
     var eventos = [];
     var markers = [];
@@ -140,12 +178,7 @@
       let hoy = new Date();
       let unMes = new Date(hoy);
       unMes.setMonth(unMes.getMonth() + 1);
-      const fmt = (d) => {
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        return `${yyyy}-${mm}-${dd}`;
-      };
+      const fmt = (d) => d.toISOString().split("T")[0];
       document.getElementById("fechaInicio").value = fmt(hoy);
       document.getElementById("fechaFin").value = fmt(unMes);
     };
@@ -160,7 +193,8 @@
           .map(normalizeRow)
           .filter(e => Number.isFinite(e.lat) && Number.isFinite(e.lon) && e.nombre);
 
-        const tipos = [...new Set(eventos.map(e => e.tipo).filter(t => t && t.trim() !== ""))].sort();
+        // Rellenar selector de tipo
+        const tipos = [...new Set(eventos.map(e => e.tipo).filter(t => t))].sort();
         const selectTipo = document.getElementById("tipo");
         tipos.forEach(t => {
           const opt = document.createElement("option");
@@ -181,35 +215,32 @@
       markers.forEach(m => map.removeLayer(m));
       markers = [];
 
+      const fi = parseFecha(fechaInicio);
+      const ff = parseFecha(fechaFin);
       const bounds = [];
-      eventos.forEach(e => {
-        if (tipo && String(e.tipo) !== String(tipo)) return;
-        if (fechaInicio) {
-          const fi = parseFecha(fechaInicio);
-          if (fi && e.fecha && e.fecha < fi) return;
-        }
-        if (fechaFin) {
-          const ff = parseFecha(fechaFin);
-          if (ff && e.fecha && e.fecha > ff) return;
-        }
 
-        let fechaTexto = e.fecha ? e.fecha.toISOString().slice(0,10) : "";
+      eventos.forEach(e => {
+        if (tipo && e.tipo !== tipo) return;
+        if (fi && e.fecha && e.fecha < fi) return;
+        if (ff && e.fecha && e.fecha > ff) return;
+
+        const fechaTexto = e.fecha ? e.fecha.toISOString().split("T")[0] : "";
         const popup =
           `<b>${e.nombre}</b><br>` +
           `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>` +
           `<b>Fecha:</b> ${fechaTexto}<br>` +
           `<b>Hora:</b> ${e.hora || "Sin especificar"}<br>` +
           `${e.descripcion ? `<br>${e.descripcion}` : ""}` +
-          `${e.link ? `<br><a href="${e.link}" target="_blank" rel="noopener">🔗 Más info</a>` : ""}`;
+          `${e.link ? `<br><a href="${e.link}" target="_blank">🔗 Más info</a>` : ""}`;
 
-        const marker = L.marker([e.lat, e.lon]).addTo(map).bindPopup(popup);
+        const icon = iconos[e.tipo] || iconos.DEFAULT;
+
+        const marker = L.marker([e.lat, e.lon], { icon }).addTo(map).bindPopup(popup);
         markers.push(marker);
         bounds.push([e.lat, e.lon]);
       });
 
-      if (bounds.length) {
-        map.fitBounds(bounds, { padding: [30, 30] });
-      }
+      if (bounds.length) map.fitBounds(bounds, { padding: [30, 30] });
     }
 
     function filtrar() {
@@ -218,6 +249,28 @@
       const tipo = document.getElementById("tipo").value;
       mostrarEventos(inicio, fin, tipo);
     }
+
+    // --- Sidebar toggle en móvil ---
+    const menuBtn = document.getElementById("menuBtn");
+    const filtros = document.getElementById("filtros");
+    menuBtn.addEventListener("click", () => {
+      filtros.classList.toggle("hidden");
+    });
+
+    // --- Leyenda ---
+    const legend = L.control({ position: "bottomright" });
+    legend.onAdd = function () {
+      const div = L.DomUtil.create("div", "legend");
+      div.innerHTML = `
+        <b>Leyenda</b><br>
+        <img src="https://cdn-icons-png.flaticon.com/512/3011/3011346.png"> Fútbol<br>
+        <img src="https://cdn-icons-png.flaticon.com/512/727/727240.png"> Concierto<br>
+        <img src="https://maps.google.com/mapfiles/ms/icons/red-dot.png"> Otros<br>
+        <img src="https://maps.google.com/mapfiles/ms/icons/yellow-dot.png"> Resto
+      `;
+      return div;
+    };
+    legend.addTo(map);
   </script>
 </body>
 </html>
