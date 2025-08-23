@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mapa de Eventos</title>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    #map { height: 85vh; }
+    #filtros {
+      padding: 10px;
+      background: #f9f9f9;
+      border-bottom: 1px solid #ccc;
+    }
+    label { margin-right: 10px; }
+  </style>
+</head>
+<body>
+  <div id="filtros">
+    <label for="fechaInicio">Desde: </label>
+    <input type="date" id="fechaInicio" />
+    <label for="fechaFin">Hasta: </label>
+    <input type="date" id="fechaFin" />
+    <label for="tipo">Tipo: </label>
+    <select id="tipo">
+      <option value="">Todos</option>
+      <option value="FUTBOL">Fútbol</option>
+      <option value="CONCIERTO">Concierto</option>
+      <option value="OTROS">Otros</option>
+    </select>
+    <button onclick="filtrar()">Filtrar</button>
+  </div>
+  <div id="map"></div>
+
+  <script>
+    var map = L.map('map').setView([40.4167, -3.70325], 6);
+
+    // Capa base
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    var eventos = [];
+    var markers = [];
+
+    // URL pública de Google Sheets en CSV
+    var sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQBgXQLiwgo23JJkp2QIOxK5OnMu-VCDTAghFzf0-C5S7gZGKe1Oi5sclWg2gWi1UM1N4Luxsd0zrY4/pub?output=csv";
+
+    // Cargar datos del Google Sheet
+    Papa.parse(sheetUrl, {
+      download: true,
+      header: true,
+      complete: function(results) {
+        eventos = results.data;
+        mostrarEventos();
+      }
+    });
+
+    // Mostrar eventos en el mapa según filtros
+    function mostrarEventos(fechaInicio = null, fechaFin = null, tipo = null) {
+      // Borrar marcadores anteriores
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+
+      eventos.forEach(e => {
+        if (!e.lat || !e.lon) return; // Evitar filas vacías
+
+        let fecha = e.fecha;
+
+        // Comprobar filtros
+        if (
+          (!fechaInicio || fecha >= fechaInicio) &&
+          (!fechaFin || fecha <= fechaFin) &&
+          (!tipo || e.tipo === tipo)
+        ) {
+          let popupContent =
+            `<b>${e.nombre}</b><br>` +
+            `${e.tipo} - ${e.fecha} ${e.hora}<br>` +
+            `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>` +
+            `${e.descripcion || ""}`;
+
+          // Si hay link, añadir botón
+          if (e.link) {
+            popupContent += `<br><a href="${e.link}" target="_blank">🔗 Más info</a>`;
+          }
+
+          let marker = L.marker([e.lat, e.lon]).addTo(map)
+            .bindPopup(popupContent);
+
+          markers.push(marker);
+        }
+      });
+    }
+
+    // Filtro por rango de fechas y tipo
+    function filtrar() {
+      var inicio = document.getElementById("fechaInicio").value;
+      var fin = document.getElementById("fechaFin").value;
+      var tipo = document.getElementById("tipo").value;
+      mostrarEventos(inicio, fin, tipo);
+    }
+  </script>
+</body>
+</html>
