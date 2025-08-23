@@ -24,7 +24,7 @@
       flex-direction: column;
       gap: 10px;
       transition: transform 0.3s ease;
-      z-index: 2000; /* Mayor que el mapa */
+      z-index: 2000;
       position: relative;
     }
     #filtros.hidden { transform: translateX(-100%); }
@@ -84,121 +84,96 @@
   <div id="map"></div>
 
   <script>
-    // --- Utilidades ---
-    const toNum = (v) => { if (v === null || v === undefined) return NaN; return parseFloat(String(v).replace(',', '.')); };
-    const parseFecha = (s) => { if (!s) return null; const d = new Date(s); return isNaN(d) ? null : d; };
-    const normalizeRow = (row) => {
-      const lower = {}; Object.keys(row).forEach(k => lower[k.toLowerCase().trim()] = row[k]);
-      const pick = (...c) => { for (const k of c) if (k in lower && String(lower[k]).trim() !== "") return lower[k]; return ""; };
-      return {
-        nombre: pick('nombre','evento','titulo'),
-        tipo: pick('tipo','categoria'),
-        fecha: parseFecha(pick('fecha','date')),
-        hora: pick('hora','time'),
-        recinto: pick('recinto','lugar','venue'),
-        descripcion: pick('descripcion','description'),
-        link: pick('link','url'),
-        lat: toNum(pick('lat','latitud')),
-        lon: toNum(pick('lon','longitud','lng'))
+    document.addEventListener("DOMContentLoaded", function(){
+
+      // --- Utilidades ---
+      const toNum = (v) => { if (v === null || v === undefined) return NaN; return parseFloat(String(v).replace(',', '.')); };
+      const parseFecha = (s) => { if (!s) return null; const d = new Date(s); return isNaN(d) ? null : d; };
+      const normalizeRow = (row) => {
+        const lower = {}; Object.keys(row).forEach(k => lower[k.toLowerCase().trim()] = row[k]);
+        const pick = (...c) => { for (const k of c) if (k in lower && String(lower[k]).trim() !== "") return lower[k]; return ""; };
+        return {
+          nombre: pick('nombre','evento','titulo'),
+          tipo: pick('tipo','categoria'),
+          fecha: parseFecha(pick('fecha','date')),
+          hora: pick('hora','time'),
+          recinto: pick('recinto','lugar','venue'),
+          descripcion: pick('descripcion','description'),
+          link: pick('link','url'),
+          lat: toNum(pick('lat','latitud')),
+          lon: toNum(pick('lon','longitud','lng'))
+        };
       };
-    };
 
-    // --- Mapa ---
-    var map = L.map('map', { zoomControl: false }).setView([40.4167, -3.70325], 6);
-    L.control.zoom({ position: 'topright' }).addTo(map);
+      // --- Mapa ---
+      var map = L.map('map', { zoomControl: false }).setView([40.4167, -3.70325], 6);
+      L.control.zoom({ position: 'topright' }).addTo(map);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
 
-    // --- Iconos ---
-    const iconos = {
-      FUTBOL: L.AwesomeMarkers.icon({ icon: 'futbol', prefix: 'fa', markerColor: 'green' }),
-      CONCIERTO: L.AwesomeMarkers.icon({ icon: 'music', prefix: 'fa', markerColor: 'blue' }),
-      OTROS: L.AwesomeMarkers.icon({ icon: 'star', prefix: 'fa', markerColor: 'red' }),
-      DEFAULT: L.AwesomeMarkers.icon({ icon: 'info', prefix: 'fa', markerColor: 'orange' })
-    };
+      // --- Iconos ---
+      const iconos = {
+        FUTBOL: L.AwesomeMarkers.icon({ icon: 'futbol', prefix: 'fa', markerColor: 'green' }),
+        CONCIERTO: L.AwesomeMarkers.icon({ icon: 'music', prefix: 'fa', markerColor: 'blue' }),
+        OTROS: L.AwesomeMarkers.icon({ icon: 'star', prefix: 'fa', markerColor: 'red' }),
+        DEFAULT: L.AwesomeMarkers.icon({ icon: 'info', prefix: 'fa', markerColor: 'orange' })
+      };
 
-    var eventos = [], markers = [];
-    var sheetUrl = "TU_LINK_DE_GOOGLE_SHEETS_AQUI";
+      var eventos = [], markers = [];
+      var sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQBgXQLiwgo23JJkp2QIOxK5OnMu-VCDTAghFzf0-C5S7gZGKe1Oi5sclWg2gWi1UM1N4Luxsd0zrY4/pubhtml";
 
-    const setDefaultDates = () => {
-      let hoy = new Date();
-      let unMes = new Date(hoy); unMes.setMonth(unMes.getMonth()+1);
-      const fmt = (d) => d.toISOString().split("T")[0];
-      document.getElementById("fechaInicio").value = fmt(hoy);
-      document.getElementById("fechaFin").value = fmt(unMes);
-    };
-    setDefaultDates();
+      // --- Fechas por defecto ---
+      const setDefaultDates = () => {
+        let hoy = new Date();
+        let unMes = new Date(hoy); unMes.setMonth(unMes.getMonth()+1);
+        const fmt = (d) => d.toISOString().split("T")[0];
+        document.getElementById("fechaInicio").value = fmt(hoy);
+        document.getElementById("fechaFin").value = fmt(unMes);
+      };
+      setDefaultDates();
 
-    Papa.parse(sheetUrl, {
-      download: true,
-      header: true,
-      skipEmptyLines: 'greedy',
-      complete: function(results){
-        eventos = results.data.map(normalizeRow).filter(e => Number.isFinite(e.lat) && Number.isFinite(e.lon) && e.nombre);
+      // --- Cargar Google Sheets ---
+      Papa.parse(sheetUrl, {
+        download: true,
+        header: true,
+        skipEmptyLines: 'greedy',
+        complete: function(results){
+          eventos = results.data.map(normalizeRow).filter(e => Number.isFinite(e.lat) && Number.isFinite(e.lon) && e.nombre);
 
-        const tipos = [...new Set(eventos.map(e => e.tipo).filter(t=>t))].sort();
-        const selectTipo = document.getElementById("tipo");
-        tipos.forEach(t=>{
-          const opt = document.createElement("option");
-          opt.value=t; opt.textContent=t; selectTipo.appendChild(opt);
-        });
+          // Rellenar selector de tipo
+          const tipos = [...new Set(eventos.map(e => e.tipo).filter(t=>t))].sort();
+          const selectTipo = document.getElementById("tipo");
+          tipos.forEach(t=>{
+            const opt = document.createElement("option");
+            opt.value=t; opt.textContent=t; selectTipo.appendChild(opt);
+          });
 
-        // Filtrado dinámico
-        document.getElementById("tipo").addEventListener("change", filtrar);
-        document.getElementById("fechaInicio").addEventListener("change", filtrar);
-        document.getElementById("fechaFin").addEventListener("change", filtrar);
-        filtrar();
-      }
-    });
+          // Filtrado dinámico
+          document.getElementById("tipo").addEventListener("change", filtrar);
+          document.getElementById("fechaInicio").addEventListener("change", filtrar);
+          document.getElementById("fechaFin").addEventListener("change", filtrar);
 
-    function mostrarEventos(fechaInicio, fechaFin, tipo){
-      markers.forEach(m=>map.removeLayer(m)); markers=[];
-      const fi=parseFecha(fechaInicio), ff=parseFecha(fechaFin); const bounds=[];
-      eventos.forEach(e=>{
-        if(tipo && e.tipo!==tipo) return;
-        if(fi && e.fecha && e.fecha<fi) return;
-        if(ff && e.fecha && e.fecha>ff) return;
-        const fechaTexto = e.fecha?e.fecha.toISOString().split("T")[0]:"";
-        const popup = `<b>${e.nombre}</b><br>`+
-                      `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>`+
-                      `<b>Fecha:</b> ${fechaTexto}<br>`+
-                      `<b>Hora:</b> ${e.hora || "Sin especificar"}<br>`+
-                      `${e.descripcion?`<br>${e.descripcion}`:""}`+
-                      `${e.link?`<br><a href="${e.link}" target="_blank">🔗 Más info</a>`:""}`;
-        const icon = iconos[e.tipo]||iconos.DEFAULT;
-        const marker = L.marker([e.lat,e.lon],{icon}).addTo(map).bindPopup(popup);
-        markers.push(marker); bounds.push([e.lat,e.lon]);
+          filtrar();
+        }
       });
-      if(bounds.length) map.fitBounds(bounds,{padding:[30,30]});
-    }
 
-    function filtrar(){
-      mostrarEventos(
-        document.getElementById("fechaInicio").value,
-        document.getElementById("fechaFin").value,
-        document.getElementById("tipo").value
-      );
-    }
-
-    // --- Botón móvil ---
-    document.getElementById("menuBtn").addEventListener("click",()=>{
-      document.getElementById("filtros").classList.toggle("hidden");
-    });
-
-    // --- Leyenda ---
-    const legend=L.control({position:"bottomright"});
-    legend.onAdd=function(){
-      const div=L.DomUtil.create("div","legend");
-      div.innerHTML=`<b>Leyenda</b><br>
-        <i class="fa fa-futbol" style="color:green"></i> Fútbol<br>
-        <i class="fa fa-music" style="color:blue"></i> Concierto<br>
-        <i class="fa fa-star" style="color:red"></i> Otros<br>
-        <i class="fa fa-info" style="color:orange"></i> Resto`;
-      return div;
-    };
-    legend.addTo(map);
-  </script>
-</body>
-</html>
+      // --- Mostrar eventos ---
+      function mostrarEventos(fechaInicio, fechaFin, tipo){
+        markers.forEach(m=>map.removeLayer(m)); markers=[];
+        const fi=parseFecha(fechaInicio), ff=parseFecha(fechaFin); const bounds=[];
+        eventos.forEach(e=>{
+          if(tipo && e.tipo!==tipo) return;
+          if(fi && e.fecha && e.fecha<fi) return;
+          if(ff && e.fecha && e.fecha>ff) return;
+          const fechaTexto = e.fecha?e.fecha.toISOString().split("T")[0]:"";
+          const popup = `<b>${e.nombre}</b><br>`+
+                        `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>`+
+                        `<b>Fecha:</b> ${fechaTexto}<br>`+
+                        `<b>Hora:</b> ${e.hora || "Sin especificar"}<br>`+
+                        `${e.descripcion?`<br>${e.descripcion}`:""}`+
+                        `${e.link?`<br><a href="${e.link}" target="_blank">🔗 Más info</a>`:""}`;
+          const icon = iconos[e.tipo]||iconos.DEFAULT;
+          const marker = L.marker([e.lat,e.lon],{icon}).addTo(map).bindPopup(popup);
+          markers.push(marker); bounds.push([e.lat
