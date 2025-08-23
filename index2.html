@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <title>MapHub</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    * { 
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body { 
+      margin: 0; 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f5f5f5;
+    }
+    
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    
+    header {
+      background-color: #2c3e50;
+      color: white;
+      padding: 15px;
+      text-align: center;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    
+    #filtros { 
+      padding: 15px; 
+      background: white; 
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      min-width: 120px;
+    }
+    
+    label { 
+      margin-bottom: 5px;
+      font-weight: bold;
+      font-size: 0.9rem;
+      color: #333;
+    }
+    
+    input, select, button {
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+    
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      min-width: 100px;
+    }
+    
+    button:hover {
+      background-color: #2980b9;
+    }
+    
+    #map { 
+      flex: 1; 
+      width: 100%;
+      z-index: 1;
+    }
+    
+    .loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255, 255, 255, 0.9);
+      padding: 20px;
+      border-radius: 5px;
+      text-align: center;
+      z-index: 1000;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+    
+    .event-count {
+      margin-left: 15px;
+      background: #e74c3c;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+    }
+    
+    /* Responsive styles */
+    @media (max-width: 768px) {
+      #filtros {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      
+      .filter-group {
+        width: 100%;
+      }
+      
+      button {
+        width: 100%;
+        margin-top: 10px;
+      }
+      
+      header h1 {
+        font-size: 1.5rem;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      input, select, button {
+        padding: 12px;
+      }
+      
+      header {
+        padding: 10px;
+      }
+      
+      header h1 {
+        font-size: 1.3rem;
+      }
+    }
+    
+    .leaflet-popup-content {
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+    
+    .leaflet-popup-content b {
+      color: #2c3e50;
+    }
+    
+    .leaflet-popup-content a {
+      color: #3498db;
+      text-decoration: none;
+    }
+    
+    .leaflet-popup-content a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>MapHub Eventos</h1>
+    </header>
+    
+    <div id="filtros">
+      <div class="filter-group">
+        <label for="fechaInicio">Desde:</label>
+        <input type="date" id="fechaInicio" />
+      </div>
+      
+      <div class="filter-group">
+        <label for="fechaFin">Hasta:</label>
+        <input type="date" id="fechaFin" />
+      </div>
+      
+      <div class="filter-group">
+        <label for="tipo">Tipo:</label>
+        <select id="tipo">
+          <option value="">Todos los tipos</option>
+        </select>
+      </div>
+      
+      <div class="filter-group">
+        <label>&nbsp;</label>
+        <button onclick="filtrar()">Filtrar</button>
+      </div>
+      
+      <span id="contador" class="event-count">0 eventos</span>
+    </div>
+    
+    <div id="map"></div>
+    
+    <div id="loading" class="loading" style="display: none;">
+      <p>Cargando eventos...</p>
+    </div>
+  </div>
+
+  <script>
+    // Mostrar indicador de carga
+    document.getElementById('loading').style.display = 'block';
+    
+    const toNum = (v) => {
+      if (v === null || v === undefined) return NaN;
+      return parseFloat(String(v).replace(',', '.'));
+    };
+
+    const parseFecha = (s) => {
+      if (!s) return null;
+      s = String(s).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        const d = new Date(s + "T00:00:00");
+        return isNaN(d) ? null : d;
+      }
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (m) {
+        const dd = parseInt(m[1], 10);
+        const mm = parseInt(m[2], 10) - 1;
+        let yyyy = parseInt(m[3], 10);
+        if (yyyy < 100) yyyy += 2000;
+        const d = new Date(yyyy, mm, dd);
+        return isNaN(d) ? null : d;
+      }
+      const d = new Date(s);
+      return isNaN(d) ? null : d;
+    };
+    
+    // Función para formatear fechas en formato local (DD/MM/AAAA)
+    const formatFecha = (fecha) => {
+      if (!fecha) return "Sin especificar";
+      
+      try {
+        return fecha.toLocaleDateString('es-ES', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        });
+      } catch (e) {
+        return "Fecha inválida";
+      }
+    };
+
+    const normalizeRow = (row) => {
+      const lower = {};
+      Object.keys(row).forEach(k => lower[k.toLowerCase().trim()] = row[k]);
+
+      const pick = (...candidatos) => {
+        for (const c of candidatos) {
+          if (c in lower && String(lower[c]).trim() !== "") return lower[c];
+        }
+        for (const key of Object.keys(lower)) {
+          if (candidatos.some(c => key.includes(c))) {
+            if (String(lower[key]).trim() !== "") return lower[key];
+          }
+        }
+        return "";
+      };
+
+      const nombre = pick('nombre', 'título', 'titulo', 'evento', 'name');
+      const tipo = String(pick('tipo', 'categoria', 'type')).trim();
+      const fechaStr = pick('fecha', 'date', 'fecha_evento');
+      const hora = pick('hora', 'time');
+      const recinto = pick('recinto', 'venue', 'lugar', 'site', 'ubicacion', 'ubicación');
+      const desc = pick('descripcion', 'descripción', 'description', 'desc');
+      const link = pick('link', 'enlace', 'url');
+      const lat = toNum(pick('lat', 'latitud', 'latitude'));
+      const lon = toNum(pick('lon', 'lng', 'long', 'longitud', 'longitude'));
+      const fecha = parseFecha(fechaStr);
+
+      return { nombre, tipo, fecha, hora, recinto, descripcion: desc, link, lat, lon };
+    };
+
+    var map = L.map('map').setView([40.4167, -3.70325], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    var eventos = [];
+    var markers = [];
+    var sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQBgXQLiwgo23JJkp2QIOxK5OnMu-VCDTAghFzf0-C5S7gZGKe1Oi5sclWg2gWi1UM1N4Luxsd0zrY4/pub?output=csv";
+
+    const setDefaultDates = () => {
+      let hoy = new Date();
+      let unMes = new Date(hoy);
+      unMes.setMonth(unMes.getMonth() + 1);
+      const fmt = (d) => {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      };
+      document.getElementById("fechaInicio").value = fmt(hoy);
+      document.getElementById("fechaFin").value = fmt(unMes);
+    };
+    setDefaultDates();
+
+    Papa.parse(sheetUrl, {
+      download: true,
+      header: true,
+      skipEmptyLines: 'greedy',
+      complete: function(results) {
+        eventos = results.data
+          .map(normalizeRow)
+          .filter(e => Number.isFinite(e.lat) && Number.isFinite(e.lon) && e.nombre);
+
+        const tipos = [...new Set(eventos.map(e => e.tipo).filter(t => t && t.trim() !== ""))].sort();
+        const selectTipo = document.getElementById("tipo");
+        tipos.forEach(t => {
+          const opt = document.createElement("option");
+          opt.value = t;
+          opt.textContent = t;
+          selectTipo.appendChild(opt);
+        });
+
+        document.getElementById("tipo").addEventListener("change", filtrar);
+        document.getElementById("fechaInicio").addEventListener("change", filtrar);
+        document.getElementById("fechaFin").addEventListener("change", filtrar);
+
+        // Ocultar indicador de carga
+        document.getElementById('loading').style.display = 'none';
+        
+        filtrar();
+      },
+      error: function(error) {
+        document.getElementById('loading').innerHTML = 
+          '<p>Error al cargar los datos. Por favor, intenta nuevamente.</p>';
+        console.error("Error loading CSV:", error);
+      }
+    });
+
+    function mostrarEventos(fechaInicio = null, fechaFin = null, tipo = null) {
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+
+      const bounds = [];
+      let eventosFiltrados = 0;
+      
+      eventos.forEach(e => {
+        if (tipo && String(e.tipo) !== String(tipo)) return;
+        if (fechaInicio) {
+          const fi = parseFecha(fechaInicio);
+          if (fi && e.fecha && e.fecha < fi) return;
+        }
+        if (fechaFin) {
+          const ff = parseFecha(fechaFin);
+          if (ff && e.fecha && e.fecha > ff) return;
+        }
+
+        eventosFiltrados++;
+        
+        const popup =
+          `<b>${e.nombre}</b><br>` +
+          `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>` +
+          `<b>Fecha:</b> ${formatFecha(e.fecha)}<br>` +
+          `<b>Hora:</b> ${e.hora || "Sin especificar"}<br>` +
+          `<b>Tipo:</b> ${e.tipo || "Sin especificar"}<br>` +
+          `${e.descripcion ? `<br>${e.descripcion}` : ""}` +
+          `${e.link ? `<br><a href="${e.link}" target="_blank" rel="noopener">🔗 Más información</a>` : ""}`;
+
+        const marker = L.marker([e.lat, e.lon]).addTo(map).bindPopup(popup);
+        markers.push(marker);
+        bounds.push([e.lat, e.lon]);
+      });
+
+      // Actualizar contador
+      document.getElementById('contador').textContent = `${eventosFiltrados} eventos`;
+      
+      if (bounds.length) {
+        // Ajustar el zoom para dispositivos móviles
+        const isMobile = window.innerWidth <= 768;
+        map.fitBounds(bounds, { padding: isMobile ? [20, 20] : [30, 30], maxZoom: isMobile ? 12 : 15 });
+      }
+    }
+
+    function filtrar() {
+      const inicio = document.getElementById("fechaInicio").value;
+      const fin = document.getElementById("fechaFin").value;
+      const tipo = document.getElementById("tipo").value;
+      mostrarEventos(inicio, fin, tipo);
+    }
+    
+    // Ajustar el mapa cuando cambia el tamaño de la ventana
+    window.addEventListener('resize', function() {
+      map.invalidateSize();
+    });
+  </script>
+</body>
+</html>
