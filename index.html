@@ -265,7 +265,7 @@
         const popup =
           `<b>${e.nombre}</b><br>` +
           `<b>Recinto:</b> ${e.recinto || "Sin especificar"}<br>` +
-          `<b>Fecha:</b> ${fechaTexto}<br>` +
+          `<b>Fecha:</b> ${fechaTexto}&nbsp;` +
           `<b>Hora:</b> ${e.hora || "Sin especificar"}<br>` +
           `${e.tipo ? `<b>Tipo:</b> ${e.tipo}<br>` : ""}` +
           `${e.descripcion ? `<br>${e.descripcion}` : ""}` +
@@ -302,6 +302,7 @@
   </script>
 </body>
 </html>
+
 
 
 
